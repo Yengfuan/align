@@ -352,6 +352,53 @@ class ApiService {
     return data;
   }
 
+  /**
+   * Get full care recipient profile with all details
+   */
+  async getCareRecipientProfile(recipientId) {
+    const { data, error } = await supabase
+      .from('care_recipients')
+      .select(`
+        id,
+        name,
+        age,
+        room,
+        preferred_form_of_address,
+        birthday,
+        wake_up,
+        breakfast,
+        lunch,
+        dinner,
+        bedtime,
+        privacy_boundaries,
+        food_preferences,
+        medication_preferences,
+        speech_pace,
+        instructions,
+        visual_cues,
+        physical_comfort,
+        hearing_status,
+        mobility_support,
+        "hearing_vision_support",
+        memory_reminders,
+        fall_risk,
+        allergies,
+        medical_conditions,
+        emergency_contact_name,
+        emergency_contact_number,
+        emergency_contact_relationship,
+        hobbies,
+        favourite_topics,
+        sensitive_topics,
+        independence_preferences
+      `)
+      .eq('id', recipientId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
   // ============= CAREGIVER ASSIGNMENTS API =============
 
   /**

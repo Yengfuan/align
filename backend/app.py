@@ -70,12 +70,14 @@ def analyze_shift_notes(shift_id):
 
         shift = shift_response.data
 
-        # Get care recipient name
+        # Get care recipient profile with all personal data
         care_recipient_name = None
+        care_recipient_profile = None
         if shift.get('care_recipient_id'):
-            recipient_response = supabase.table('care_recipients').select('name').eq('id', shift['care_recipient_id']).single().execute()
+            recipient_response = supabase.table('care_recipients').select('*').eq('id', shift['care_recipient_id']).single().execute()
             if recipient_response.data:
                 care_recipient_name = recipient_response.data.get('name')
+                care_recipient_profile = recipient_response.data
 
         # In the new schema, shift notes are stored in the 'content' field
         shift_content = shift.get('content')
@@ -103,11 +105,12 @@ def analyze_shift_notes(shift_id):
             'end_time': shift.get('end_time')
         }
 
-        # Call Gemini service to analyze notes
+        # Call Gemini service to analyze notes with recipient profile
         analysis = gemini_service.analyze_shift_notes(
             shift_notes=notes,
             care_recipient_name=care_recipient_name,
-            shift_context=shift_context
+            shift_context=shift_context,
+            care_recipient_profile=care_recipient_profile
         )
         return jsonify(analysis)
 

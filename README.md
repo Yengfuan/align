@@ -1,5 +1,9 @@
-# Elderly Care App - Hack4Good
+# Elderly Care App: Align
 
+## Problem Statement
+Develop a solution that improve relationships between caregiver and the care recipient so that caregivers can provide the care that the care recipients want/need in a mutually respectful, meaningful, and joyful way.
+
+## Our Proposed Solution
 A React Native mobile application designed to help NPOs caring for elderly individuals. The app provides voice recording capabilities for care recipients and comprehensive shift management tools for caregivers.
 
 ## Features
@@ -8,6 +12,8 @@ A React Native mobile application designed to help NPOs caring for elderly indiv
 - Simple voice recording interface
 - Visual feedback during recording
 - Easy-to-use single-button design
+- Straightforward interface to share recordings to caregivers
+- Able to select which caregivers receive the recording
 
 ### For Caregivers
 - View assigned care recipients
@@ -15,13 +21,16 @@ A React Native mobile application designed to help NPOs caring for elderly indiv
 - Listen to voice recordings from care recipients
 - Create and view notes for each recording
 - Collaborate with other caregivers through shared notes
+- Analyse shift notes with AI
+- Learn from improvements suggested by AI
 
 ## Tech Stack
 
 - React Native (with Expo)
 - React Navigation for routing
 - Expo AV for audio recording
-- Mock data for initial development
+- Supabase for data storage
+- Railway for CI/CD
 
 ## Getting Started
 
@@ -53,38 +62,14 @@ npm start
    - Install Expo Go app on your iOS or Android device
    - Scan the QR code from the terminal
 
-### Demo Login Credentials
-
-- **Care Recipient**: CR001
-- **Caregiver**: CG001
-
-## Project Structure
-
-```
-Hack4Good/
-├── src/
-│   ├── screens/
-│   │   ├── LoginScreen.js
-│   │   ├── CareRecipientHome.js
-│   │   ├── CaregiverHome.js
-│   │   ├── CareRecipientDetail.js
-│   │   ├── ShiftDetail.js
-│   │   └── RecordingDetail.js
-│   └── data/
-│       └── mockData.js
-├── App.js
-├── app.json
-├── package.json
-└── README.md
-```
 
 ## User Flow
 
 ### Care Recipient Flow
-1. Login with ID → 2. Record voice messages
+1. Login with ID → 2. Record voice messages -> 3. Record again OR delete recordings OR select caregivers to send recordings to
 
 ### Caregiver Flow
-1. Login with ID → 2. View care recipients → 3. Select recipient → 4. View shifts → 5. Access recordings → 6. Play recording & manage notes
+1. Login with ID → 2. View care recipients → 3. Select recipient → 4. View shifts → 5. Access recordings → 6. Play recording, manage, view and write notes and analyse notes with AI
 
 ## Future Enhancements
 
@@ -96,14 +81,9 @@ Hack4Good/
 - Offline mode support
 - Enhanced security features
 
-## Contributing
-
-This is a basic prototype ready for UI/UX improvements. Feel free to:
-- Enhance the visual design
-- Add animations and transitions
-- Improve accessibility
-- Add new features
 
 ## License
 
 MIT
+
+Go to SETUP.md for more details.

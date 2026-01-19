@@ -1,132 +1,63 @@
 //recipientprofile.js
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Colors, TextStyles, ContainerStyles, Shadows, BorderRadius } from '../styles/CommonStyles';
+import api from '../services/api';
 
 export default function RecipientProfile({ route }) {
   const { recipient } = route.params;
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Profile data - basic info comes from Supabase care_recipients table
-  // TODO: In production, create a 'care_recipient_profiles' table in Supabase
-  // to store detailed profile information like preferences, medical history, etc.
-  const profileData = {
-    basicInfo: {
-      age: recipient.age,
-      room: recipient.room,
-      preferredAddress: 'Uncle Tan',
-      dateOfBirth: 'March 15, 1950',
-    },
-    carePreferences: {
-      routineTimes: {
-        wakeUp: '7:00 AM',
-        breakfast: '8:00 AM',
-        lunch: '12:30 PM',
-        dinner: '6:00 PM',
-        bedtime: '9:30 PM',
-      },
-      privacyBoundaries: [
-        'Prefers privacy during bathing',
-        'Knock before entering room',
-        'Keeps bedroom door closed',
-      ],
-      foodPreferences: [
-        'Allergic to shellfish',
-        'Prefers soft foods',
-        'Enjoys tea with meals',
-        'Low sodium diet',
-      ],
-      medications: [
-        'Blood pressure medication - 8:00 AM daily',
-        'Vitamin D supplement - with breakfast',
-        'Pain relief - as needed',
-      ],
-    },
-    communicationStyle: {
-      speechPace: 'Speaks slowly',
-      instructions: 'Prefers short, clear instructions',
-      visualCues: 'Benefits from visual demonstrations',
-      physicalComfort: 'Comfortable with light touch on shoulder',
-      hearingStatus: 'Mild hearing loss in left ear',
-    },
-    supportNeeds: {
-      mobility: [
-        'Uses walker for longer distances',
-        'Needs assistance with stairs',
-        'Can walk short distances independently',
-      ],
-      sensory: [
-        'Wears reading glasses',
-        'Hearing aid in right ear',
-        'Prefers well-lit spaces',
-      ],
-      memory: [
-        'Benefits from written reminders',
-        'Calendar visible in room',
-        'Occasional confusion about dates',
-      ],
-    },
-    safetyNotes: {
-      fallRisk: 'Moderate - use of walker reduces risk',
-      allergies: [
-        'Shellfish - severe reaction',
-        'Penicillin - mild rash',
-      ],
-      emergencyContact: {
-        name: 'Sarah Tan (Daughter)',
-        phone: '+65 9123 4567',
-        relationship: 'Daughter',
-      },
-      medicalConditions: [
-        'Hypertension (controlled)',
-        'Mild arthritis',
-        'Type 2 Diabetes',
-      ],
-    },
-    whatMatters: {
-      hobbies: [
-        'Listening to classical music',
-        'Reading newspapers',
-        'Watching nature documentaries',
-        'Playing cards',
-      ],
-      favoriteTopics: [
-        'Stories about grandchildren',
-        'Garden and plants',
-        'History and current events',
-        'Family traditions',
-      ],
-      comfort: [
-        'Soft blanket during rest time',
-        'Window view of garden',
-        'Photos of family nearby',
-        'Quiet environment in mornings',
-      ],
-    },
-    boundaries: {
-      avoidTopics: [
-        'Loss of spouse (recent)',
-        'Financial matters',
-        'Discussing decline in health',
-      ],
-      independence: [
-        'Prefers to dress independently',
-        'Likes to choose own meals',
-        'Values making own decisions',
-        'Dislikes being rushed',
-      ],
-      sharingComfort: [
-        'Comfortable sharing with regular caregivers',
-        'Prefers female caregivers for personal care',
-        'Open to sharing daily activities',
-        'Private about medical details',
-      ],
-    },
+  useEffect(() => {
+    fetchProfile();
+  }, [recipient.id]);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await api.getCareRecipientProfile(recipient.id);
+      setProfile(data);
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError('Failed to load profile data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Helper to format time from "HH:MM:SS" to "H:MM AM/PM"
+  const formatTime = (timeStr) => {
+    if (!timeStr) return 'Not set';
+    try {
+      const [hours, minutes] = timeStr.split(':');
+      const hour = parseInt(hours, 10);
+      const ampm = hour >= 12 ? 'PM' : 'AM';
+      const hour12 = hour % 12 || 12;
+      return `${hour12}:${minutes} ${ampm}`;
+    } catch {
+      return timeStr;
+    }
+  };
+
+  // Helper to format date
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Not set';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
   };
 
   const Section = ({ title, icon, children }) => (
@@ -144,7 +75,7 @@ export default function RecipientProfile({ route }) {
   const InfoRow = ({ label, value }) => (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}:</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={styles.infoValue}>{value || 'Not set'}</Text>
     </View>
   );
 
@@ -154,6 +85,29 @@ export default function RecipientProfile({ route }) {
       <Text style={[styles.listText, type === 'warning' && styles.listTextWarning]}>{text}</Text>
     </View>
   );
+
+  const TextBlock = ({ text }) => (
+    <View style={styles.textBlock}>
+      <Text style={styles.textBlockContent}>{text || 'Not set'}</Text>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -165,131 +119,151 @@ export default function RecipientProfile({ route }) {
               {recipient.name.split(' ').map(n => n[0]).join('')}
             </Text>
           </View>
-          <Text style={styles.profileName}>{recipient.name}</Text>
+          <Text style={styles.profileName}>{profile?.name || recipient.name}</Text>
           <Text style={styles.profileSubtitle}>Complete Care Profile</Text>
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
       >
         {/* Basic Info */}
-        <Section title="Basic Information" icon="👤">
-          <InfoRow label="Age" value={profileData.basicInfo.age} />
-          <InfoRow label="Room" value={profileData.basicInfo.room} />
-          <InfoRow label="Preferred Form of Address" value={profileData.basicInfo.preferredAddress} />
-          <InfoRow label="Date of Birth" value={profileData.basicInfo.dateOfBirth} />
+        <Section title="Basic Information" icon="&#128100;">
+          <InfoRow label="Age" value={profile?.age} />
+          <InfoRow label="Room" value={profile?.room} />
+          <InfoRow label="Preferred Form of Address" value={profile?.preferred_form_of_address} />
+          <InfoRow label="Date of Birth" value={formatDate(profile?.birthday)} />
         </Section>
 
         {/* Care Preferences */}
-        <Section title="Care Preferences" icon="⏰">
+        <Section title="Care Preferences" icon="&#9200;">
           <Text style={styles.subsectionTitle}>Routine Times</Text>
-          <InfoRow label="Wake Up" value={profileData.carePreferences.routineTimes.wakeUp} />
-          <InfoRow label="Breakfast" value={profileData.carePreferences.routineTimes.breakfast} />
-          <InfoRow label="Lunch" value={profileData.carePreferences.routineTimes.lunch} />
-          <InfoRow label="Dinner" value={profileData.carePreferences.routineTimes.dinner} />
-          <InfoRow label="Bedtime" value={profileData.carePreferences.routineTimes.bedtime} />
-          
-          <Text style={styles.subsectionTitle}>Privacy Boundaries</Text>
-          {profileData.carePreferences.privacyBoundaries.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Food & Medication Preferences</Text>
-          {profileData.carePreferences.foodPreferences.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Medications</Text>
-          {profileData.carePreferences.medications.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
+          <InfoRow label="Wake Up" value={formatTime(profile?.wake_up)} />
+          <InfoRow label="Breakfast" value={formatTime(profile?.breakfast)} />
+          <InfoRow label="Lunch" value={formatTime(profile?.lunch)} />
+          <InfoRow label="Dinner" value={formatTime(profile?.dinner)} />
+          <InfoRow label="Bedtime" value={formatTime(profile?.bedtime)} />
+
+          {profile?.privacy_boundaries && (
+            <>
+              <Text style={styles.subsectionTitle}>Privacy Boundaries</Text>
+              <TextBlock text={profile.privacy_boundaries} />
+            </>
+          )}
+
+          {profile?.food_preferences && (
+            <>
+              <Text style={styles.subsectionTitle}>Food Preferences</Text>
+              <TextBlock text={profile.food_preferences} />
+            </>
+          )}
+
+          {profile?.medication_preferences && (
+            <>
+              <Text style={styles.subsectionTitle}>Medication Preferences</Text>
+              <TextBlock text={profile.medication_preferences} />
+            </>
+          )}
         </Section>
 
         {/* Communication Style */}
-        <Section title="Communication Style" icon="💬">
-          <InfoRow label="Speech Pace" value={profileData.communicationStyle.speechPace} />
-          <InfoRow label="Instructions" value={profileData.communicationStyle.instructions} />
-          <InfoRow label="Visual Cues" value={profileData.communicationStyle.visualCues} />
-          <InfoRow label="Physical Comfort" value={profileData.communicationStyle.physicalComfort} />
-          <InfoRow label="Hearing Status" value={profileData.communicationStyle.hearingStatus} />
+        <Section title="Communication Style" icon="&#128172;">
+          <InfoRow label="Speech Pace" value={profile?.speech_pace} />
+          <InfoRow label="Instructions" value={profile?.instructions} />
+          <InfoRow label="Visual Cues" value={profile?.visual_cues} />
+          <InfoRow label="Physical Comfort" value={profile?.physical_comfort} />
+          <InfoRow label="Hearing Status" value={profile?.hearing_status} />
         </Section>
 
         {/* Support Needs */}
-        <Section title="Support Needs" icon="🤝">
-          <Text style={styles.subsectionTitle}>Mobility Support</Text>
-          {profileData.supportNeeds.mobility.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Hearing / Vision Support</Text>
-          {profileData.supportNeeds.sensory.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Memory Reminders</Text>
-          {profileData.supportNeeds.memory.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
+        <Section title="Support Needs" icon="&#129309;">
+          {profile?.mobility_support && (
+            <>
+              <Text style={styles.subsectionTitle}>Mobility Support</Text>
+              <TextBlock text={profile.mobility_support} />
+            </>
+          )}
+
+          {profile?.["hearing_vision_support"] && (
+            <>
+              <Text style={styles.subsectionTitle}>Hearing / Vision Support</Text>
+              <TextBlock text={profile["hearing_vision_support"]} />
+            </>
+          )}
+
+          {profile?.memory_reminders && (
+            <>
+              <Text style={styles.subsectionTitle}>Memory Reminders</Text>
+              <TextBlock text={profile.memory_reminders} />
+            </>
+          )}
         </Section>
 
         {/* Safety Notes */}
-        <Section title="Safety Notes" icon="⚠️">
-          <InfoRow label="Fall Risk" value={profileData.safetyNotes.fallRisk} />
-          
-          <Text style={styles.subsectionTitle}>Allergies</Text>
-          {profileData.safetyNotes.allergies.map((item, index) => (
-            <ListItem key={index} text={item} type="warning" />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Medical Conditions</Text>
-          {profileData.safetyNotes.medicalConditions.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <View style={styles.emergencyCard}>
-            <Text style={styles.emergencyTitle}>🚨 Emergency Contact</Text>
-            <InfoRow label="Name" value={profileData.safetyNotes.emergencyContact.name} />
-            <InfoRow label="Phone" value={profileData.safetyNotes.emergencyContact.phone} />
-            <InfoRow label="Relationship" value={profileData.safetyNotes.emergencyContact.relationship} />
-          </View>
+        <Section title="Safety Notes" icon="&#9888;&#65039;">
+          <InfoRow label="Fall Risk" value={profile?.fall_risk} />
+
+          {profile?.allergies && (
+            <>
+              <Text style={styles.subsectionTitle}>Allergies</Text>
+              <View style={styles.warningBox}>
+                <Text style={styles.warningText}>{profile.allergies}</Text>
+              </View>
+            </>
+          )}
+
+          {profile?.medical_conditions && (
+            <>
+              <Text style={styles.subsectionTitle}>Medical Conditions</Text>
+              <TextBlock text={profile.medical_conditions} />
+            </>
+          )}
+
+          {(profile?.emergency_contact_name || profile?.emergency_contact_number) && (
+            <View style={styles.emergencyCard}>
+              <Text style={styles.emergencyTitle}>&#128680; Emergency Contact</Text>
+              <InfoRow label="Name" value={profile.emergency_contact_name} />
+              <InfoRow label="Phone" value={profile.emergency_contact_number} />
+              <InfoRow label="Relationship" value={profile.emergency_contact_relationship} />
+            </View>
+          )}
         </Section>
 
         {/* What Matters to Me */}
-        <Section title="What Matters to Me" icon="❤️">
-          <Text style={styles.subsectionTitle}>Hobbies</Text>
-          {profileData.whatMatters.hobbies.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Favorite Topics</Text>
-          {profileData.whatMatters.favoriteTopics.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>What Brings Comfort</Text>
-          {profileData.whatMatters.comfort.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
+        <Section title="What Matters to Me" icon="&#10084;&#65039;">
+          {profile?.hobbies && (
+            <>
+              <Text style={styles.subsectionTitle}>Hobbies</Text>
+              <TextBlock text={profile.hobbies} />
+            </>
+          )}
+
+          {profile?.favourite_topics && (
+            <>
+              <Text style={styles.subsectionTitle}>Favorite Topics</Text>
+              <TextBlock text={profile.favourite_topics} />
+            </>
+          )}
         </Section>
 
         {/* Boundaries */}
-        <Section title="Boundaries" icon="🛡️">
-          <Text style={styles.subsectionTitle}>Topics I Don't Like to Discuss</Text>
-          {profileData.boundaries.avoidTopics.map((item, index) => (
-            <ListItem key={index} text={item} type="warning" />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Things I Prefer to Do Myself</Text>
-          {profileData.boundaries.independence.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
-          
-          <Text style={styles.subsectionTitle}>Who I'm Comfortable Sharing With</Text>
-          {profileData.boundaries.sharingComfort.map((item, index) => (
-            <ListItem key={index} text={item} />
-          ))}
+        <Section title="Boundaries" icon="&#128737;&#65039;">
+          {profile?.sensitive_topics && (
+            <>
+              <Text style={styles.subsectionTitle}>Sensitive Topics</Text>
+              <View style={styles.warningBox}>
+                <Text style={styles.warningText}>{profile.sensitive_topics}</Text>
+              </View>
+            </>
+          )}
+
+          {profile?.independence_preferences && (
+            <>
+              <Text style={styles.subsectionTitle}>Independence Preferences</Text>
+              <TextBlock text={profile.independence_preferences} />
+            </>
+          )}
         </Section>
 
         <View style={styles.bottomSpacer} />
@@ -302,6 +276,21 @@ const styles = StyleSheet.create({
   container: {
     ...ContainerStyles.screen,
     backgroundColor: Colors.gray50,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.gray600,
+  },
+  errorText: {
+    fontSize: 16,
+    color: Colors.danger,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   header: {
     ...ContainerStyles.headerRounded,
@@ -420,6 +409,31 @@ const styles = StyleSheet.create({
   listTextWarning: {
     color: Colors.danger,
     fontWeight: '600',
+  },
+  textBlock: {
+    backgroundColor: Colors.gray50,
+    borderRadius: BorderRadius.md,
+    padding: 12,
+    marginTop: 4,
+  },
+  textBlockContent: {
+    fontSize: 15,
+    color: Colors.gray700,
+    lineHeight: 22,
+  },
+  warningBox: {
+    backgroundColor: '#fff5f5',
+    borderRadius: BorderRadius.md,
+    padding: 12,
+    marginTop: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.danger,
+  },
+  warningText: {
+    fontSize: 15,
+    color: Colors.danger,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   emergencyCard: {
     backgroundColor: '#fff5f5',

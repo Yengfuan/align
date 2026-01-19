@@ -20,33 +20,36 @@
 ## Testing the App
 
 ### Test as Care Recipient
-1. Login with ID: `CR001`
+1. Login with ID: `CR001` or `CR002`
 2. You'll see a large record button
 3. Tap to start recording (you'll need to grant microphone permission)
 4. Tap again to stop recording
-5. The recording will be saved (simulated for now)
+5. The recording can be uploaded, deleted or rerecorded
 
 ### Test as Caregiver
-1. Login with ID: `CG001`
-2. You'll see a list of 3 care recipients
+1. Login with ID: `CG001` or `CG002` or `CG003` or `CG004` or `CG005`
+2. You'll see a list of different number of care recipients configured based on our database
 3. Tap on any care recipient (e.g., "John Doe")
 4. View the work shifts
 5. Tap on a shift to see recordings
-6. Tap on a recording to:
-   - Play the audio (simulated)
+6. Tap on AI analysis to request API for suggestions on how to help the care recipient better
+7. Tap on a recording to:
+   - Play the audio
    - View existing notes
    - Add new notes
 
 ## Available Demo IDs
 
 **Care Recipients:**
-- CR001 (John Doe)
-- CR002 (Mary Smith)
-- CR003 (Emma Brown)
+- CG001 (John Doe)
+- CR002 (Aleena C)
 
 **Caregivers:**
-- CG001 (Alice Johnson) - assigned to all 3 recipients
-- CG002 (Bob Williams) - assigned to 2 recipients
+- CG001 (Gan Jia Xuan)
+- CG002 (Seah Jun Jie)
+- CG003 (Tan Feng Yuan)
+- CG004 (Elysia Doe)
+- CG005 (Daniel Hogan)
 
 ## Current Features
 
@@ -54,17 +57,10 @@
 ✅ Voice recording with visual feedback
 ✅ Care recipient list view
 ✅ Shift management
-✅ Recording playback interface (simulated)
+✅ Recording playback interface
 ✅ Collaborative notes system
-✅ Mock data for testing
-
-## What's Not Yet Implemented
-
-⏳ Actual audio playback
-⏳ Cloud storage for recordings
-⏳ Real-time data synchronization
-⏳ User profile management
-⏳ Settings and preferences
+✅ Mock data stored on Supabase for prototype
+✅ Functional groupchat between care recipients
 
 ## Troubleshooting
 
@@ -79,15 +75,3 @@
 **Permission errors:**
 - Grant microphone permission when prompted
 - Check your phone's app settings if recording doesn't work
-
-## Next Steps for UI Improvements
-
-Your friend can now:
-1. Customize colors and theme
-2. Add better icons
-3. Improve animations
-4. Enhance the recording interface
-5. Add more visual polish
-6. Implement custom fonts
-7. Add loading states
-8. Improve error handling UI

@@ -8,7 +8,6 @@ import LoginScreen from './src/screens/LoginScreen';
 import CareRecipientHome from './src/screens/CareRecipientHome';
 import CaregiverHome from './src/screens/CaregiverHome';
 import CareRecipientDetail from './src/screens/CareRecipientDetail';
-import ShiftDetail from './src/screens/ShiftDetail';
 import RecordingDetail from './src/screens/RecordingDetail';
 import RecipientProfile from './src/screens/RecipientProfile';
 import CaregiverGroupChat from './src/screens/CaregiverGroupChat';
@@ -47,11 +46,6 @@ export default function App() {
           name="RecipientProfile"
           component={RecipientProfile}
           options={{ title: 'Care Profile' }}
-        />
-        <Stack.Screen
-          name="ShiftDetail"
-          component={ShiftDetail}
-          options={{ title: 'Shift Recordings' }}
         />
         <Stack.Screen
           name="RecordingDetail"
