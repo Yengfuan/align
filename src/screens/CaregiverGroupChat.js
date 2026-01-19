@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,45 +8,97 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
+import api from '../services/api';
+import message_service from '../services/message-service';
 import { Colors, TextStyles, InputStyles, ButtonStyles, ContainerStyles, BorderRadius, Shadows } from '../styles/CommonStyles';
 
 export default function CaregiverGroupChat({ route, navigation }) {
   const { recipient, caregiver } = route.params;
 
-  // Mock caregiver list - replace with actual data from your backend
-  const caregivers = [
-    { id: 'CG001', name: 'Alice Johnson' },
-    { id: 'CG002', name: 'Michael Chen' },
-    { id: 'CG003', name: 'Sarah Williams' },
-  ];
-
-  // Mock messages - in production, fetch from backend
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      senderId: 'CG001',
-      senderName: 'Alice Johnson',
-      message: `${recipient.name} had a good breakfast this morning!`,
-      timestamp: new Date(Date.now() - 3600000).toISOString(),
-    },
-    {
-      id: '2',
-      senderId: 'CG002',
-      senderName: 'Michael Chen',
-      message: 'Thanks for the update. Did they take their medication?',
-      timestamp: new Date(Date.now() - 3000000).toISOString(),
-    },
-    {
-      id: '3',
-      senderId: 'CG001',
-      senderName: 'Alice Johnson',
-      message: 'Yes, all medications taken at 9am',
-      timestamp: new Date(Date.now() - 2400000).toISOString(),
-    },
-  ]);
-
+  // Fetch caregivers from Supabase
+  const [caregivers, setCaregivers] = useState([]);
+  const [loadingCaregivers, setLoadingCaregivers] = useState(true);
+  const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(true);
   const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollViewRef = React.useRef(null);
+
+  useEffect(() => {
+    fetchCaregivers();
+    fetchMessages();
+
+    // Subscribe to real-time messages
+    const channel = message_service.subscribeToMessages(recipient.id, (newMsg) => {
+      setMessages((prev) => {
+        // Avoid duplicates (in case we just sent this message)
+        if (prev.some(m => m.uuid === newMsg.uuid)) {
+          return prev;
+        }
+        return [...prev, newMsg];
+      });
+    });
+
+    // Fallback: Poll for new messages every 5 seconds in case broadcast fails
+    const pollInterval = setInterval(() => {
+      fetchMessagesQuietly();
+    }, 3000);
+
+    // Cleanup subscription and polling on unmount
+    return () => {
+      message_service.unsubscribeFromMessages(channel);
+      clearInterval(pollInterval);
+    };
+  }, [recipient.id]);
+
+  // Quiet fetch that doesn't show loading state (for polling)
+  const fetchMessagesQuietly = async () => {
+    try {
+      const data = await message_service.getMessages(recipient.id);
+      setMessages((prev) => {
+        // Only update if there are new messages
+        if (data.length !== prev.length ||
+            (data.length > 0 && prev.length > 0 && data[data.length - 1].uuid !== prev[prev.length - 1].uuid)) {
+          return data;
+        }
+        return prev;
+      });
+    } catch (error) {
+      // Silent fail for background polling
+      console.log('Background poll failed:', error);
+    }
+  };
+
+  const fetchCaregivers = async () => {
+    try {
+      setLoadingCaregivers(true);
+      const assignments = await api.getAssignedCaregivers(recipient.id);
+      const caregiverList = assignments
+        .filter(a => a.caregivers)
+        .map(a => ({ id: a.caregivers.id, name: a.caregivers.name }));
+      setCaregivers(caregiverList);
+    } catch (error) {
+      console.error('Error fetching caregivers:', error);
+      setCaregivers([]);
+    } finally {
+      setLoadingCaregivers(false);
+    }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      setLoadingMessages(true);
+      const data = await message_service.getMessages(recipient.id);
+      setMessages(data);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      setMessages([]);
+    } finally {
+      setLoadingMessages(false);
+    }
+  };
 
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
@@ -56,19 +108,34 @@ export default function CaregiverGroupChat({ route, navigation }) {
     });
   };
 
-  const handleSendMessage = () => {
-    if (newMessage.trim() === '') return;
+  const handleSendMessage = async () => {
+    if (newMessage.trim() === '' || sending) return;
 
-    const message = {
-      id: Date.now().toString(),
-      senderId: caregiver.id,
-      senderName: caregiver.name,
-      message: newMessage,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages([...messages, message]);
+    const messageContent = newMessage.trim();
     setNewMessage('');
+
+    try {
+      setSending(true);
+      const sentMessage = await message_service.sendMessage({
+        careRecipientId: recipient.id,
+        senderId: caregiver.id,
+        senderName: caregiver.name,
+        content: messageContent,
+      });
+      // Add the sent message to the list immediately (optimistic update)
+      setMessages((prev) => {
+        if (prev.some(m => m.uuid === sentMessage.uuid)) {
+          return prev;
+        }
+        return [...prev, sentMessage];
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Restore the message if sending failed
+      setNewMessage(messageContent);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -83,45 +150,64 @@ export default function CaregiverGroupChat({ route, navigation }) {
         <Text style={styles.headerSubtitle}>Discussion about {recipient.name}</Text>
         <View style={styles.participantsContainer}>
           <Text style={styles.participantsLabel}>Participants:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {caregivers.map((cg) => (
-              <View key={cg.id} style={styles.participantBadge}>
-                <View style={styles.participantAvatar}>
-                  <Text style={styles.participantAvatarText}>
-                    {cg.name.split(' ').map(n => n[0]).join('')}
-                  </Text>
+          {loadingCaregivers ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : caregivers.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {caregivers.map((cg) => (
+                <View key={cg.id} style={styles.participantBadge}>
+                  <View style={styles.participantAvatar}>
+                    <Text style={styles.participantAvatarText}>
+                      {cg.name ? cg.name.split(' ').map(n => n[0]).join('') : '?'}
+                    </Text>
+                  </View>
+                  <Text style={styles.participantName}>{cg.name || 'Unknown'}</Text>
                 </View>
-                <Text style={styles.participantName}>{cg.name}</Text>
-              </View>
-            ))}
-          </ScrollView>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noParticipantsText}>No caregivers assigned</Text>
+          )}
         </View>
       </View>
 
       {/* Messages */}
       <ScrollView
+        ref={scrollViewRef}
         style={styles.messagesContainer}
         contentContainerStyle={styles.messagesContent}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
       >
-        {messages.map((msg) => {
-          const isOwnMessage = msg.senderId === caregiver.id;
-          return (
-            <View
-              key={msg.id}
-              style={[
-                styles.messageBox,
-                isOwnMessage ? styles.ownMessage : styles.otherMessage,
-              ]}
-            >
-              {!isOwnMessage && (
-                <Text style={styles.senderName}>{msg.senderName}</Text>
-              )}
-              <Text style={styles.messageText}>{msg.message}</Text>
-              <Text style={styles.messageTime}>{formatTime(msg.timestamp)}</Text>
-            </View>
-          );
-        })}
+        {loadingMessages ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Loading messages...</Text>
+          </View>
+        ) : messages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No messages yet. Start the conversation!</Text>
+          </View>
+        ) : (
+          messages.map((msg) => {
+            const isOwnMessage = msg.sender_id === caregiver.id;
+            return (
+              <View
+                key={msg.uuid}
+                style={[
+                  styles.messageBox,
+                  isOwnMessage ? styles.ownMessage : styles.otherMessage,
+                ]}
+              >
+                {!isOwnMessage && (
+                  <Text style={styles.senderName}>{msg.sender_name}</Text>
+                )}
+                <Text style={styles.messageText}>{msg.content}</Text>
+                <Text style={styles.messageTime}>{formatTime(msg.created_at)}</Text>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
 
       {/* Input Area */}
@@ -136,11 +222,15 @@ export default function CaregiverGroupChat({ route, navigation }) {
           maxLength={500}
         />
         <TouchableOpacity
-          style={[styles.sendButton, newMessage.trim() === '' && styles.sendButtonDisabled]}
+          style={[styles.sendButton, (newMessage.trim() === '' || sending) && styles.sendButtonDisabled]}
           onPress={handleSendMessage}
-          disabled={newMessage.trim() === ''}
+          disabled={newMessage.trim() === '' || sending}
         >
-          <Text style={styles.sendButtonText}>Send</Text>
+          {sending ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <Text style={styles.sendButtonText}>Send</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -284,5 +374,32 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 15,
     fontWeight: '600',
+  },
+  noParticipantsText: {
+    fontSize: 13,
+    color: Colors.gray500,
+    fontStyle: 'italic',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: Colors.gray600,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.gray500,
+    textAlign: 'center',
   },
 });

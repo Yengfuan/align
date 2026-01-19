@@ -4,6 +4,101 @@ All notable changes to this project are documented in this file.
 
 ---
 
+## [2026-01-18] - Supabase Migration
+
+### 🔄 Major Infrastructure Change: Flask → Supabase
+
+Migrated the entire backend from Flask/SQLite to Supabase for real-time database capabilities and easier deployment.
+
+**Files Changed:**
+- `src/services/supabase.js` - NEW: Supabase client configuration
+- `src/services/api.js` - COMPLETE REWRITE: Now uses Supabase instead of Flask
+- `package.json` - Added `@supabase/supabase-js` dependency
+
+---
+
+#### What Changed in `api.js`:
+
+**REMOVED:**
+- Flask backend URL constant (`API_BASE_URL`)
+- `request()` method that made fetch calls to Flask
+
+**ADDED:**
+- Import from `./supabase` for Supabase client
+- All methods now use Supabase queries directly
+
+**Method Changes:**
+
+| Method | Old (Flask) | New (Supabase) |
+|--------|-------------|----------------|
+| `getNotes(recordingId)` | `GET /recordings/{id}/notes` | `supabase.from('notes').select('*').eq('recording_id', id)` |
+| `addNote(recordingId, noteData)` | `POST /recordings/{id}/notes` | `supabase.from('notes').insert({...}).select().single()` |
+| `updateNote(noteId, content)` | `PUT /notes/{id}` | `supabase.from('notes').update({content}).eq('id', id)` |
+| `deleteNote(noteId)` | `DELETE /notes/{id}` | `supabase.from('notes').delete().eq('id', id)` |
+| `getRecordings(careRecipientId)` | `GET /recordings?care_recipient_id={id}` | `supabase.from('recordings').select('*').eq('care_recipient_id', id)` |
+| `getRecording(recordingId)` | `GET /recordings/{id}` | `supabase.from('recordings').select('*, notes(*)').eq('id', id)` |
+| `createRecording(data)` | `POST /recordings` | `supabase.from('recordings').insert(data).select().single()` |
+| `getShifts(careRecipientId)` | `GET /shifts?care_recipient_id={id}` | `supabase.from('shifts').select('*').eq('care_recipient_id', id)` |
+| `getShift(shiftId)` | `GET /shifts/{id}` | `supabase.from('shifts').select('*').eq('id', id)` |
+| `createShift(data)` | `POST /shifts` | `supabase.from('shifts').insert(data).select().single()` |
+| `getShiftNotes(shiftId)` | `GET /shifts/{id}/notes` | `supabase.from('shift_notes').select('*').eq('shift_id', id)` |
+| `addShiftNote(shiftId, noteData)` | `POST /shifts/{id}/notes` | `supabase.from('shift_notes').insert({...}).select().single()` |
+| `updateShiftNote(noteId, content)` | `PUT /shift-notes/{id}` | `supabase.from('shift_notes').update({content}).eq('id', id)` |
+| `deleteShiftNote(noteId)` | `DELETE /shift-notes/{id}` | `supabase.from('shift_notes').delete().eq('id', id)` |
+| `getUsers()` | `GET /users` | `supabase.from('users').select('*')` |
+| `getUser(userId)` | `GET /users/{id}` | `supabase.from('users').select('*').eq('id', id)` |
+| `getCareRecipients()` | `GET /care-recipients` | `supabase.from('care_recipients').select('*')` |
+| `getCareRecipient(id)` | `GET /care-recipients/{id}` | `supabase.from('care_recipients').select('*').eq('id', id)` |
+| `healthCheck()` | `GET /health` | Tests Supabase connection with simple query |
+
+---
+
+#### New File: `src/services/supabase.js`
+
+```javascript
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = 'https://qqkaowchizgilmgwktxr.supabase.co';
+const SUPABASE_ANON_KEY = 'your-anon-key';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+```
+
+---
+
+#### Required Supabase Tables
+
+Your Supabase database should have these tables (matching the Flask schema):
+
+| Table | Columns |
+|-------|---------|
+| `users` | id, name, role, ... |
+| `care_recipients` | id, name, ... |
+| `recordings` | id, care_recipient_id, shift_id, duration, audio_url, excluded_caregivers, timestamp |
+| `notes` | id, recording_id, content, timestamp |
+| `shifts` | id, care_recipient_id, date, shift_number, ... |
+| `shift_notes` | id, shift_id, caregiver_id, caregiver_name, content, timestamp |
+
+---
+
+### 🚀 Benefits of Supabase Migration
+
+1. **No Flask server required** - Direct database access from app
+2. **Real-time updates** - Can subscribe to data changes
+3. **Built-in authentication** - Ready for future auth features
+4. **Automatic REST API** - No need to write backend endpoints
+5. **Easier deployment** - No server to host/maintain
+
+---
+
+### ⚠️ Breaking Changes
+
+- Flask backend (`backend/app.py`) is no longer used
+- Must have Supabase project set up with correct tables
+- Row Level Security (RLS) policies may need configuration
+
+---
+
 ## [2026-01-14] - Major Feature Updates
 
 ### 🎉 New Features

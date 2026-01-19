@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Alert,
   Animated,
-  Modal,
   ScrollView,
   Image,
 } from 'react-native';
@@ -22,17 +21,27 @@ export default function CareRecipientHome({ route, navigation }) {
   const [hasRecording, setHasRecording] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sound, setSound] = useState(null);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
 
-  // Mock caregiver list - replace with actual data from your backend
-  const [caregivers] = useState([
-    { id: 'CG001', name: 'Sarah Johnson' },
-    { id: 'CG002', name: 'Michael Chen' },
-    { id: 'CG003', name: 'Emily Rodriguez' },
-    { id: 'CG004', name: 'David Kim' },
-  ]);
+  // Fetch caregivers from Supabase
+  const [caregivers, setCaregivers] = useState([]);
   const [excludedCaregivers, setExcludedCaregivers] = useState([]);
+
+  // Load assigned caregivers on mount
+  React.useEffect(() => {
+    const fetchCaregivers = async () => {
+      try {
+        const assignments = await api.getAssignedCaregivers(user.id);
+        const caregiverList = assignments
+          .filter(a => a.caregivers)
+          .map(a => ({ id: a.caregivers.id, name: a.caregivers.name }));
+        setCaregivers(caregiverList);
+      } catch (error) {
+        console.error('Error fetching caregivers:', error);
+      }
+    };
+    fetchCaregivers();
+  }, [user.id]);
 
   const handleLogout = async () => {
     Alert.alert(
@@ -200,38 +209,34 @@ export default function CareRecipientHome({ route, navigation }) {
       const today = new Date();
       const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-      // Fetch existing shifts for this care recipient
-      const shifts = await api.getShifts(user.id);
-
-      // Find today's shift (optional - recording can exist without a shift)
-      let todayShift = shifts.find(s => s.date === todayString);
-      const shiftId = todayShift ? todayShift.id : null;
-
-      if (!todayShift) {
-        console.log(`[CareRecipientHome] No shift found for today. Recording will be unassociated until caregiver creates a shift.`);
-      } else {
-        console.log(`[CareRecipientHome] Using existing shift: ${shiftId}`);
-      }
-
-      // Create the recording in the backend (shift_id can be null)
+      // Create the recording in Supabase
       const recordingData = {
-        shift_id: shiftId, // Can be null - will be associated with shift later
         care_recipient_id: user.id,
         duration: recordingDuration,
         audio_url: recordingUri, // In production, upload to cloud storage first
-        excluded_caregivers: excludedCaregivers, // Optional: for privacy settings
+        date: todayString,
       };
 
       console.log('[CareRecipientHome] Creating recording:', recordingData);
       const createdRecording = await api.createRecording(recordingData);
       console.log('[CareRecipientHome] Recording created:', createdRecording);
 
-      let message = 'Recording uploaded successfully!';
-      if (!todayShift) {
-        message += ' Your caregiver will be able to see it once they document today\'s shift.';
+      // Set recording access for each caregiver
+      if (excludedCaregivers.length > 0 && createdRecording.uuid) {
+        // For excluded caregivers, set has_access to false
+        for (const caregiverId of excludedCaregivers) {
+          await api.setRecordingAccess(createdRecording.uuid, caregiverId, false);
+        }
+        // For included caregivers, set has_access to true
+        const includedCaregivers = caregivers.filter(c => !excludedCaregivers.includes(c.id));
+        for (const caregiver of includedCaregivers) {
+          await api.setRecordingAccess(createdRecording.uuid, caregiver.id, true);
+        }
       }
+
+      let message = 'Recording uploaded successfully!';
       if (excludedCaregivers.length > 0) {
-        message += ` Excluded: ${caregivers.filter(c => excludedCaregivers.includes(c.id)).map(c => c.name).join(', ')}`;
+        message += ` Hidden from: ${caregivers.filter(c => excludedCaregivers.includes(c.id)).map(c => c.name).join(', ')}`;
       }
 
       Alert.alert('Success', message);
@@ -417,80 +422,51 @@ export default function CareRecipientHome({ route, navigation }) {
               >
                 <Text style={styles.deleteButtonText}>🗑️ Delete</Text>
               </TouchableOpacity>
+            </View>
 
-              {/* Privacy Settings */}
-              <TouchableOpacity
-                style={styles.privacyButton}
-                onPress={() => setShowPrivacyModal(true)}
-              >
-                <Text style={styles.privacyButtonText}>🔒 Privacy Settings</Text>
-                <Text style={styles.privacySubtext}>
-                  {excludedCaregivers.length === 0
-                    ? ' Currently visible to all caregivers. Press to change.'
-                    : `Hidden from ${excludedCaregivers.length} caregiver(s). Press to change.`}
-                </Text>
-              </TouchableOpacity>
+            {/* Privacy Settings - Inline */}
+            <View style={styles.privacySection}>
+              <Text style={styles.privacyTitle}>🔒 Privacy Settings</Text>
+              <Text style={styles.privacySubtitle}>
+                Select caregivers to exclude from viewing this recording
+              </Text>
+
+              <View style={styles.caregiverList}>
+                {caregivers.map((caregiver) => {
+                  const isExcluded = excludedCaregivers.includes(caregiver.id);
+                  return (
+                    <TouchableOpacity
+                      key={caregiver.id}
+                      style={[
+                        styles.caregiverItem,
+                        isExcluded && styles.caregiverItemExcluded,
+                      ]}
+                      onPress={() => toggleCaregiverExclusion(caregiver.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.caregiverName,
+                          isExcluded && styles.caregiverNameExcluded,
+                        ]}
+                      >
+                        {caregiver.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.caregiverStatus,
+                          { color: isExcluded ? '#f44336' : '#4CAF50' },
+                        ]}
+                      >
+                        {isExcluded ? '❌ Hidden' : '✅ Visible'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           </View>
         )}
       </ScrollView>
-
-      {/* Privacy Modal */}
-      <Modal
-        visible={showPrivacyModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPrivacyModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🔒 Privacy Settings</Text>
-            <Text style={styles.modalSubtitle}>
-              Select caregivers to exclude from viewing this recording
-            </Text>
-
-            <ScrollView style={styles.caregiverList}>
-              {caregivers.map((caregiver) => {
-                const isExcluded = excludedCaregivers.includes(caregiver.id);
-                return (
-                  <TouchableOpacity
-                    key={caregiver.id}
-                    style={[
-                      styles.caregiverItem,
-                      isExcluded && styles.caregiverItemExcluded,
-                    ]}
-                    onPress={() => toggleCaregiverExclusion(caregiver.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.caregiverName,
-                        isExcluded && styles.caregiverNameExcluded,
-                      ]}
-                    >
-                      {caregiver.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.caregiverStatus,
-                        { color: isExcluded ? '#f44336' : '#4CAF50' },
-                      ]}
-                    >
-                      {isExcluded ? '❌ Hidden' : '✅ Visible'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowPrivacyModal(false)}
-            >
-              <Text style={styles.modalCloseButtonText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -712,62 +688,33 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 0.5,
   },
-  privacyButton: {
+  privacySection: {
     backgroundColor: 'white',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#9C27B0',
-    shadowColor: '#9C27B0',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  privacyButtonText: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#9C27B0',
-    marginBottom: 6,
-    letterSpacing: 0.5,
-  },
-  privacySubtext: {
-    fontSize: 18,
-    color: '#6c757d',
-    fontWeight: '500',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 28,
-    maxHeight: '80%',
+    borderRadius: 20,
+    padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
   },
-  modalTitle: {
-    fontSize: 28,
+  privacyTitle: {
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#1a1a1a',
     marginBottom: 10,
   },
-  modalSubtitle: {
-    fontSize: 22,
+  privacySubtitle: {
+    fontSize: 20,
     color: '#6c757d',
-    marginBottom: 24,
+    marginBottom: 20,
     fontWeight: '500',
+    lineHeight: 26,
   },
   caregiverList: {
-    maxHeight: 400,
+    marginTop: 4,
   },
   caregiverItem: {
     flexDirection: 'row',
@@ -801,24 +748,5 @@ const styles = StyleSheet.create({
   caregiverStatus: {
     fontSize: 18,
     fontWeight: '700',
-  },
-  modalCloseButton: {
-    backgroundColor: 'red',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 20,
-    shadowColor: 'red',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  modalCloseButtonText: {
-    color: 'white',
-    fontSize: 22,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
   },
 });

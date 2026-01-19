@@ -19,67 +19,53 @@ import { Colors, TextStyles, ButtonStyles, ContainerStyles, InputStyles, Shadows
 export default function ShiftDetail({ route, navigation }) {
   const { shift, recipient, caregiver } = route.params;
 
-  // Recordings state - fetch from backend instead of mock data
+  // Recordings state - fetch from backend
   const [shiftRecordings, setShiftRecordings] = useState([]);
   const [loadingRecordings, setLoadingRecordings] = useState(true);
 
-  // Shift notes state
-  const [shiftNotes, setShiftNotes] = useState([]);
-  const [newNote, setNewNote] = useState('');
-  const [loadingNotes, setLoadingNotes] = useState(true);
+  // Shift content/notes state (stored in shift.content field)
+  const [shiftContent, setShiftContent] = useState(shift.content || '');
+  const [editingContent, setEditingContent] = useState(false);
+  const [newContent, setNewContent] = useState(shift.content || '');
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch shift notes and recordings when component mounts
+  // Fetch recordings when component mounts
   useEffect(() => {
-    fetchShiftNotes();
     fetchRecordings();
   }, []);
-
-  const fetchShiftNotes = async () => {
-    try {
-      setLoadingNotes(true);
-      const fetchedNotes = await api.getShiftNotes(shift.id);
-      setShiftNotes(fetchedNotes);
-    } catch (error) {
-      console.error('Error fetching shift notes:', error);
-      Alert.alert('Error', 'Failed to load shift notes');
-    } finally {
-      setLoadingNotes(false);
-    }
-  };
 
   const fetchRecordings = async () => {
     try {
       setLoadingRecordings(true);
-      // Fetch the shift data which includes recordings
-      const shifts = await api.getShifts(recipient.id);
+      // Fetch all recordings for this care recipient on this date
+      const allRecordings = await api.getRecordings(recipient.id);
 
-      // Find the current shift and get its recordings
-      const currentShift = shifts.find(s => s.id === shift.id);
+      // Filter recordings that match this shift's date
+      const dateRecordings = allRecordings.filter(r => r.date === shift.date);
 
-      if (currentShift && currentShift.recordings) {
-        // Fetch notes for each recording to match the expected format
-        const recordingsWithNotes = await Promise.all(
-          currentShift.recordings.map(async (recording) => {
-            try {
-              const notes = await api.getNotes(recording.id);
-              return {
-                ...recording,
-                notes: notes || [],
-              };
-            } catch (error) {
-              console.error(`Error fetching notes for recording ${recording.id}:`, error);
-              return {
-                ...recording,
-                notes: [],
-              };
-            }
-          })
-        );
-        setShiftRecordings(recordingsWithNotes);
-      } else {
-        setShiftRecordings([]);
-      }
+      // Fetch notes for each recording
+      const recordingsWithNotes = await Promise.all(
+        dateRecordings.map(async (recording) => {
+          try {
+            const notes = await api.getNotes(recording.uuid);
+            return {
+              ...recording,
+              id: recording.uuid,
+              timestamp: recording.created_at,
+              notes: notes || [],
+            };
+          } catch (error) {
+            console.error(`Error fetching notes for recording ${recording.uuid}:`, error);
+            return {
+              ...recording,
+              id: recording.uuid,
+              timestamp: recording.created_at,
+              notes: [],
+            };
+          }
+        })
+      );
+      setShiftRecordings(recordingsWithNotes);
     } catch (error) {
       console.error('Error fetching recordings:', error);
       setShiftRecordings([]);
@@ -88,27 +74,22 @@ export default function ShiftDetail({ route, navigation }) {
     }
   };
 
-  const handleAddNote = async () => {
-    if (newNote.trim() === '') {
-      Alert.alert('Error', 'Please enter a note');
+  const handleUpdateContent = async () => {
+    if (newContent.trim() === shiftContent.trim()) {
+      setEditingContent(false);
       return;
     }
 
     try {
       setSubmitting(true);
-      const noteData = {
-        caregiverId: caregiver.id,
-        caregiverName: caregiver.name,
-        content: newNote.trim(),
-      };
-
-      const createdNote = await api.addShiftNote(shift.id, noteData);
-      setShiftNotes([createdNote, ...shiftNotes]);
-      setNewNote('');
-      Alert.alert('Success', 'Shift note added successfully');
+      const shiftId = shift.uuid || shift.id;
+      await api.updateShiftContent(shiftId, newContent.trim());
+      setShiftContent(newContent.trim());
+      setEditingContent(false);
+      Alert.alert('Success', 'Shift notes updated successfully');
     } catch (error) {
-      console.error('Error adding shift note:', error);
-      Alert.alert('Error', 'Failed to add note');
+      console.error('Error updating shift content:', error);
+      Alert.alert('Error', 'Failed to update notes');
     } finally {
       setSubmitting(false);
     }
@@ -137,16 +118,6 @@ export default function ShiftDetail({ route, navigation }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatNoteTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -155,7 +126,7 @@ export default function ShiftDetail({ route, navigation }) {
     >
       <View style={styles.header}>
         <Text style={styles.shiftTitle}>
-          {shift.shiftNumber ? `Shift ${shift.shiftNumber}` : 'Shift Details'}
+          {shift.shiftNumber || shift.shift_no ? `Shift ${shift.shiftNumber || shift.shift_no}` : 'Shift Details'}
         </Text>
         <Text style={styles.recipientName}>{recipient.name}</Text>
         <Text style={styles.dateText}>
@@ -173,57 +144,61 @@ export default function ShiftDetail({ route, navigation }) {
         <View style={styles.notesSection}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Shift Notes</Text>
-            <Text style={styles.recordingCount}>
-              {shiftNotes.length} note{shiftNotes.length !== 1 ? 's' : ''}
-            </Text>
+            {!editingContent && (
+              <TouchableOpacity onPress={() => setEditingContent(true)}>
+                <Text style={styles.editButton}>Edit</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
-          <View style={styles.addNoteCard}>
-            <TextInput
-              style={styles.noteInput}
-              placeholder="Add a note about this shift (e.g., patient mood, activities, concerns)..."
-              value={newNote}
-              onChangeText={setNewNote}
-              multiline
-              numberOfLines={3}
-              editable={!submitting}
-            />
-            <TouchableOpacity
-              style={[styles.addNoteButton, submitting && styles.addNoteButtonDisabled]}
-              onPress={handleAddNote}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <Text style={styles.addNoteButtonText}>Add Note</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {loadingNotes ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4A90E2" />
+          {editingContent ? (
+            <View style={styles.addNoteCard}>
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Add notes about this shift (e.g., patient mood, activities, concerns)..."
+                value={newContent}
+                onChangeText={setNewContent}
+                multiline
+                numberOfLines={6}
+                editable={!submitting}
+              />
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setNewContent(shiftContent);
+                    setEditingContent(false);
+                  }}
+                  disabled={submitting}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveButton, submitting && styles.saveButtonDisabled]}
+                  onPress={handleUpdateContent}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          ) : shiftNotes.length > 0 ? (
-            <View style={styles.notesList}>
-              {shiftNotes.map((note) => (
-                <View key={note.id} style={styles.noteCard}>
-                  <View style={styles.noteHeader}>
-                    <Text style={styles.noteCaregiverName}>
-                      {note.caregiverName || note.caregiver_name}
-                    </Text>
-                    <Text style={styles.noteTimestamp}>
-                      {formatNoteTime(note.timestamp)}
-                    </Text>
-                  </View>
-                  <Text style={styles.noteContent}>{note.content}</Text>
-                </View>
-              ))}
+          ) : shiftContent ? (
+            <View style={styles.contentCard}>
+              <Text style={styles.contentText}>{shiftContent}</Text>
             </View>
           ) : (
             <View style={styles.emptyNotesContainer}>
               <Text style={styles.emptyNotesText}>No shift notes yet</Text>
+              <TouchableOpacity
+                style={styles.addFirstNoteButton}
+                onPress={() => setEditingContent(true)}
+              >
+                <Text style={styles.addFirstNoteText}>+ Add Notes</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -231,7 +206,7 @@ export default function ShiftDetail({ route, navigation }) {
         {/* AI Analysis Section */}
         <View style={styles.aiAnalysisSection}>
           <ShiftAIAnalysis
-            shiftId={shift.id}
+            shiftId={shift.uuid || shift.id}
             careRecipientName={recipient.name}
           />
         </View>
@@ -252,7 +227,7 @@ export default function ShiftDetail({ route, navigation }) {
           </View>
         ) : shiftRecordings.map((recording, index) => (
           <TouchableOpacity
-            key={recording.id}
+            key={recording.uuid || recording.id}
             style={styles.recordingCard}
             onPress={() => handleRecordingPress(recording)}
             activeOpacity={0.7}
@@ -263,14 +238,14 @@ export default function ShiftDetail({ route, navigation }) {
               </View>
               <View style={styles.recordingInfo}>
                 <Text style={styles.timeText}>
-                  {formatTime(recording.timestamp)}
+                  {formatTime(recording.created_at || recording.timestamp)}
                 </Text>
                 <Text style={styles.durationText}>
                   Duration: {formatDuration(recording.duration)}
                 </Text>
               </View>
               <View style={styles.recordingMeta}>
-                {recording.notes.length > 0 && (
+                {recording.notes && recording.notes.length > 0 && (
                   <View style={styles.notesBadge}>
                     <Text style={styles.notesBadgeText}>
                       {recording.notes.length} note{recording.notes.length !== 1 ? 's' : ''}
@@ -327,6 +302,11 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...TextStyles.h4,
+  },
+  editButton: {
+    color: Colors.info,
+    fontSize: 16,
+    fontWeight: '600',
   },
   recordingCount: {
     ...TextStyles.small,
@@ -413,18 +393,47 @@ const styles = StyleSheet.create({
   noteInput: {
     ...InputStyles.base,
     ...InputStyles.multiline,
-    minHeight: 80,
+    minHeight: 120,
     marginBottom: 12,
   },
-  addNoteButton: {
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  cancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.gray400,
+  },
+  cancelButtonText: {
+    color: Colors.gray600,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  saveButton: {
     ...ButtonStyles.base,
     ...ButtonStyles.info,
+    paddingHorizontal: 24,
   },
-  addNoteButtonDisabled: {
+  saveButtonDisabled: {
     ...ButtonStyles.disabled,
   },
-  addNoteButtonText: {
+  saveButtonText: {
     ...TextStyles.buttonText,
+  },
+  contentCard: {
+    ...ContainerStyles.card,
+    marginHorizontal: 15,
+    marginVertical: 10,
+    padding: 15,
+  },
+  contentText: {
+    fontSize: 15,
+    color: Colors.text,
+    lineHeight: 22,
   },
   loadingContainer: {
     padding: 20,
@@ -433,35 +442,6 @@ const styles = StyleSheet.create({
   loadingText: {
     ...TextStyles.small,
     marginTop: 10,
-  },
-  notesList: {
-    paddingHorizontal: 15,
-  },
-  noteCard: {
-    ...ContainerStyles.card,
-    padding: 15,
-    marginBottom: 12,
-  },
-  noteHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  noteCaregiverName: {
-    ...TextStyles.body,
-    fontWeight: 'bold',
-    color: Colors.info,
-  },
-  noteTimestamp: {
-    ...TextStyles.caption,
-  },
-  noteContent: {
-    fontSize: 15,
-    color: Colors.text,
-    lineHeight: 22,
   },
   emptyNotesContainer: {
     backgroundColor: Colors.white,
@@ -474,6 +454,18 @@ const styles = StyleSheet.create({
   emptyNotesText: {
     ...TextStyles.small,
     textAlign: 'center',
+    marginBottom: 12,
+  },
+  addFirstNoteButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: Colors.info,
+    borderRadius: BorderRadius.md,
+  },
+  addFirstNoteText: {
+    color: Colors.white,
+    fontSize: 14,
+    fontWeight: '600',
   },
   aiAnalysisSection: {
     paddingHorizontal: 15,

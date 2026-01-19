@@ -7,26 +7,61 @@ import {
   StyleSheet,
   Alert,
   ImageBackground,
+  ActivityIndicator,
 } from 'react-native';
-import { mockUsers } from '../data/mockData';
+import api from '../services/api';
 import { Colors, TextStyles, InputStyles, ButtonStyles, Shadows } from '../styles/CommonStyles';
 
 export default function LoginScreen({ navigation, setUser }) {
   const [userId, setUserId] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    const user = mockUsers.find(u => u.id === userId);
+  const handleLogin = async () => {
+    if (!userId.trim()) {
+      Alert.alert('Error', 'Please enter your User ID');
+      return;
+    }
 
-    if (user) {
-      setUser(user);
-      if (user.role === 'care-recipient') {
-        navigation.replace('CareRecipientHome', { user });
-      } else if (user.role === 'caregiver') {
-        navigation.replace('CaregiverHome', { user });
+    try {
+      setLoading(true);
+      // Fetch user from Supabase
+      const user = await api.getUser(userId.trim());
 
+      if (user) {
+        setUser(user);
+        if (user.role === 'care-recipient') {
+          // Fetch care recipient details
+          try {
+            const recipientDetails = await api.getCareRecipient(user.id);
+            const fullUser = { ...user, ...recipientDetails };
+            setUser(fullUser);
+            navigation.replace('CareRecipientHome', { user: fullUser });
+          } catch {
+            // If no care_recipient record, just use user data
+            navigation.replace('CareRecipientHome', { user });
+          }
+        } else if (user.role === 'caregiver') {
+          // Fetch caregiver details
+          try {
+            const caregiverDetails = await api.getCaregiver(user.id);
+            const fullUser = { ...user, ...caregiverDetails };
+            setUser(fullUser);
+            navigation.replace('CaregiverHome', { user: fullUser });
+          } catch {
+            // If no caregiver record, just use user data
+            navigation.replace('CaregiverHome', { user });
+          }
+        } else {
+          Alert.alert('Error', 'Unknown user role');
+        }
+      } else {
+        Alert.alert('Error', 'Invalid User ID');
       }
-    } else {
-      Alert.alert('Error', 'Invalid User ID');
+    } catch (error) {
+      console.error('Login error:', error);
+      Alert.alert('Error', 'Failed to login. Please check your User ID and try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -52,11 +87,20 @@ export default function LoginScreen({ navigation, setUser }) {
               onChangeText={setUserId}
               autoCapitalize="none"
               placeholderTextColor="#999"
+              editable={!loading}
             />
 
             {/* Login Button */}
-            <TouchableOpacity style={styles.button} onPress={handleLogin}>
-              <Text style={styles.buttonText}>Login</Text>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={styles.buttonText}>Login</Text>
+              )}
             </TouchableOpacity>
 
             {/* Help Text - Replaced demo IDs */}
@@ -127,6 +171,9 @@ const styles = StyleSheet.create({
     ...ButtonStyles.base,
     ...ButtonStyles.primary,
   },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
   buttonText: {
     ...TextStyles.buttonText,
   },
@@ -151,6 +198,6 @@ const styles = StyleSheet.create({
   },
   brandingBold: {
     fontWeight: '600',
-    color: Colors.gray700,
+    color: Colors.primary,
   },
 });

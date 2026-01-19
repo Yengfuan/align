@@ -1,5 +1,5 @@
 //caregiverhome.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,37 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
-import { careRecipients } from '../data/mockData';
+import api from '../services/api';
 import { Colors, TextStyles, ContainerStyles, Shadows, BorderRadius } from '../styles/CommonStyles';
 
 export default function CaregiverHome({ route, navigation }) {
   const { user } = route.params;
+  const [assignedRecipients, setAssignedRecipients] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const assignedRecipients = careRecipients.filter(recipient =>
-    user.assignedRecipients.includes(recipient.id)
-  );
+  useEffect(() => {
+    fetchAssignedRecipients();
+  }, []);
+
+  const fetchAssignedRecipients = async () => {
+    try {
+      setLoading(true);
+      // Fetch care recipients assigned to this caregiver
+      const assignments = await api.getAssignedCareRecipients(user.id);
+      // Extract the care_recipients data from assignments
+      const recipients = assignments
+        .filter(a => a.care_recipients)
+        .map(a => a.care_recipients);
+      setAssignedRecipients(recipients);
+    } catch (error) {
+      console.error('Error fetching assigned recipients:', error);
+      Alert.alert('Error', 'Failed to load assigned care recipients');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleRecipientPress = (recipient) => {
     navigation.navigate('CareRecipientDetail', { recipient, caregiver: user });
@@ -69,11 +90,16 @@ export default function CaregiverHome({ route, navigation }) {
         </View>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.listContainer}
         showsVerticalScrollIndicator={false}
       >
-        {assignedRecipients.map((recipient, index) => (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+            <Text style={styles.loadingText}>Loading care recipients...</Text>
+          </View>
+        ) : assignedRecipients.map((recipient, index) => (
           <TouchableOpacity
             key={recipient.id}
             style={[
@@ -111,7 +137,7 @@ export default function CaregiverHome({ route, navigation }) {
           </TouchableOpacity>
         ))}
 
-        {assignedRecipients.length === 0 && (
+        {!loading && assignedRecipients.length === 0 && (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📋</Text>
             <Text style={styles.emptyText}>No care recipients assigned</Text>
@@ -275,5 +301,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.gray500,
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 60,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: Colors.gray600,
   },
 });

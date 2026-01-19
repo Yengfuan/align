@@ -1,6 +1,6 @@
 # Elderly Care App - Hack4Good
 
-Hello gay A React Native mobile application designed to help NPOs caring for elderly individuals. The app provides voice recording capabilities for care recipients and comprehensive shift management tools for caregivers.
+A React Native mobile application designed to help NPOs caring for elderly individuals. The app provides voice recording capabilities for care recipients and comprehensive shift management tools for caregivers.
 
 ## Features
 

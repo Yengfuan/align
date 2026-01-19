@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import api from '../services/api';
+import gemini from '../services/gemini'
 
 /**
  * Simple banner component that auto-loads and displays AI-generated shift summary
@@ -19,7 +19,7 @@ const ShiftSummaryBanner = ({ shiftId }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.getShiftSummary(shiftId);
+      const result = await gemini.getShiftSummary(shiftId);
       setSummary(result.summary || 'No summary available');
     } catch (err) {
       setError(err.message);

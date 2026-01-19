@@ -8,6 +8,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import api from '../services/api';
+import gemini from '../services/gemini'
 
 /**
  * Component to display AI-powered analysis of shift notes
@@ -25,7 +26,7 @@ const ShiftAIAnalysis = ({ shiftId, careRecipientName }) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await api.analyzeShiftNotes(shiftId);
+      const result = await gemini.analyzeShiftNotes(shiftId);
       setAnalysis(result);
       setExpandedSummary(true);
       setExpandedPriorities(true);

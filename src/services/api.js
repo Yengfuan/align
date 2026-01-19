@@ -1,89 +1,98 @@
-// API Service for communicating with Flask backend
-
-// Update this to your machine's IP address when testing on a physical device
-// For iOS Simulator: use localhost or 127.0.0.1
-// For Android Emulator: use 10.0.2.2
-// For Physical Device: use your computer's local IP (e.g., 192.168.1.x)
-const API_BASE_URL = 'http://change-me:5000';
+// API Service using Supabase
+import { supabase } from './supabase';
 
 class ApiService {
-  /**
-   * Make a fetch request with error handling
-   */
-  async request(endpoint, options = {}) {
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        ...options,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'API request failed');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API Error:', error);
-      throw error;
-    }
-  }
-
   // ============= NOTES API =============
 
   /**
    * Get all notes for a recording
    */
-  async getNotes(recordingId) {
-    return this.request(`/recordings/${recordingId}/notes`);
+  async getNotes(recordingUuid) {
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .eq('recording_id', recordingUuid);
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Add a new note to a recording
    */
-  async addNote(recordingId, noteData) {
-    return this.request(`/recordings/${recordingId}/notes`, {
-      method: 'POST',
-      body: JSON.stringify(noteData),
-    });
+  async addNote(recordingUuid, noteData) {
+    const { data, error } = await supabase
+      .from('notes')
+      .insert({
+        recording_id: recordingUuid,
+        caregiver_id: noteData.caregiverId,
+        caregiver_name: noteData.caregiverName,
+        content: noteData.content,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Update an existing note
    */
-  async updateNote(noteId, content) {
-    return this.request(`/notes/${noteId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    });
+  async updateNote(noteUuid, content) {
+    const { data, error } = await supabase
+      .from('notes')
+      .update({ content })
+      .eq('uuid', noteUuid)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Delete a note
    */
-  async deleteNote(noteId) {
-    return this.request(`/notes/${noteId}`, {
-      method: 'DELETE',
-    });
+  async deleteNote(noteUuid) {
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('uuid', noteUuid);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
   }
 
   // ============= RECORDINGS API =============
 
   /**
-   * Get all recordings
+   * Get all recordings, optionally filtered by care recipient
    */
-  async getRecordings() {
-    return this.request('/recordings');
+  async getRecordings(careRecipientId = null) {
+    let query = supabase.from('recordings').select('*');
+
+    if (careRecipientId) {
+      query = query.eq('care_recipient_id', careRecipientId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Get a specific recording with its notes
    */
-  async getRecording(recordingId) {
-    return this.request(`/recordings/${recordingId}`);
+  async getRecording(recordingUuid) {
+    const { data, error } = await supabase
+      .from('recordings')
+      .select('*, notes(*)')
+      .eq('uuid', recordingUuid)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
@@ -91,18 +100,104 @@ class ApiService {
    */
   async createRecording(recordingData) {
     console.log('[API] createRecording called with:', recordingData);
-    console.log('[API] Sending POST to:', `${API_BASE_URL}/recordings`);
     try {
-      const result = await this.request('/recordings', {
-        method: 'POST',
-        body: JSON.stringify(recordingData),
-      });
-      console.log('[API] createRecording success:', result);
-      return result;
+      const { data, error } = await supabase
+        .from('recordings')
+        .insert({
+          care_recipient_id: recordingData.care_recipient_id,
+          duration: recordingData.duration,
+          audio_url: recordingData.audio_url,
+          date: recordingData.date || new Date().toISOString().split('T')[0],
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      console.log('[API] createRecording success:', data);
+      return data;
     } catch (error) {
       console.error('[API] createRecording failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Set recording access for caregivers
+   */
+  async setRecordingAccess(recordingUuid, caregiverId, hasAccess) {
+    const { data, error } = await supabase
+      .from('recording_access')
+      .upsert({
+        recording_id: recordingUuid,
+        caregiver_id: caregiverId,
+        has_access: hasAccess,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Get recording access list
+   */
+  async getRecordingAccess(recordingUuid) {
+    const { data, error } = await supabase
+      .from('recording_access')
+      .select('*')
+      .eq('recording_id', recordingUuid);
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Check if a caregiver has access to a specific recording
+   * Returns true if caregiver has access, false if explicitly denied
+   * If no access record exists, returns true (default is visible)
+   */
+  async checkRecordingAccess(recordingUuid, caregiverId) {
+    const { data, error } = await supabase
+      .from('recording_access')
+      .select('has_access')
+      .eq('recording_id', recordingUuid)
+      .eq('caregiver_id', caregiverId)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    // If no record exists, default to having access (visible to all)
+    if (!data) return true;
+
+    // Return the has_access value
+    return data.has_access;
+  }
+
+  /**
+   * Get all recordings that a caregiver has access to for a care recipient
+   * Filters out recordings where the caregiver has been explicitly denied access
+   */
+  async getAccessibleRecordings(careRecipientId, caregiverId) {
+    // First get all recordings for the care recipient
+    const allRecordings = await this.getRecordings(careRecipientId);
+
+    if (!caregiverId) {
+      // If no caregiver ID provided, return all recordings
+      return allRecordings;
+    }
+
+    // Filter recordings based on access permissions
+    const accessibleRecordings = [];
+
+    for (const recording of allRecordings) {
+      const hasAccess = await this.checkRecordingAccess(recording.uuid, caregiverId);
+      if (hasAccess) {
+        accessibleRecordings.push(recording);
+      }
+    }
+
+    return accessibleRecordings;
   }
 
   // ============= SHIFTS API =============
@@ -111,71 +206,66 @@ class ApiService {
    * Get all shifts, optionally filtered by care recipient
    */
   async getShifts(careRecipientId = null) {
-    const query = careRecipientId ? `?care_recipient_id=${careRecipientId}` : '';
-    return this.request(`/shifts${query}`);
+    let query = supabase.from('shifts').select('*');
+
+    if (careRecipientId) {
+      query = query.eq('care_recipient_id', careRecipientId);
+    }
+
+    const { data, error } = await query.order('date', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Get a specific shift
    */
-  async getShift(shiftId) {
-    return this.request(`/shifts/${shiftId}`);
-  }
+  async getShift(shiftUuid) {
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('*')
+      .eq('uuid', shiftUuid)
+      .single();
 
-  // ============= SHIFT NOTES API =============
-
-  /**
-   * Get all notes for a shift
-   */
-  async getShiftNotes(shiftId) {
-    return this.request(`/shifts/${shiftId}/notes`);
-  }
-
-  /**
-   * Add a new note to a shift
-   */
-  async addShiftNote(shiftId, noteData) {
-    return this.request(`/shifts/${shiftId}/notes`, {
-      method: 'POST',
-      body: JSON.stringify(noteData),
-    });
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
-   * Update an existing shift note
+   * Create a new shift
    */
-  async updateShiftNote(noteId, content) {
-    return this.request(`/shift-notes/${noteId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content }),
-    });
+  async createShift(shiftData) {
+    const { data, error } = await supabase
+      .from('shifts')
+      .insert({
+        care_recipient_id: shiftData.care_recipient_id,
+        care_giver_id: shiftData.care_giver_id,
+        shift_no: shiftData.shift_no,
+        date: shiftData.date,
+        start_time: shiftData.start_time,
+        end_time: shiftData.end_time,
+        content: shiftData.content || null,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
-   * Delete a shift note
+   * Update shift content (notes)
    */
-  async deleteShiftNote(noteId) {
-    return this.request(`/shift-notes/${noteId}`, {
-      method: 'DELETE',
-    });
-  }
+  async updateShiftContent(shiftUuid, content) {
+    const { data, error } = await supabase
+      .from('shifts')
+      .update({ content })
+      .eq('uuid', shiftUuid)
+      .select()
+      .single();
 
-  // ============= AI/GEMINI API =============
-
-  /**
-   * Analyze shift notes and get AI-powered suggestions for next shift
-   */
-  async analyzeShiftNotes(shiftId) {
-    return this.request(`/shifts/${shiftId}/analyze`, {
-      method: 'POST',
-    });
-  }
-
-  /**
-   * Get AI-generated summary of shift notes
-   */
-  async getShiftSummary(shiftId) {
-    return this.request(`/shifts/${shiftId}/summary`);
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   // ============= USERS API =============
@@ -184,14 +274,54 @@ class ApiService {
    * Get all users
    */
   async getUsers() {
-    return this.request('/users');
+    const { data, error } = await supabase
+      .from('users')
+      .select('*');
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Get a specific user
    */
   async getUser(userId) {
-    return this.request(`/users/${userId}`);
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  // ============= CAREGIVERS API =============
+
+  /**
+   * Get all caregivers
+   */
+  async getCaregivers() {
+    const { data, error } = await supabase
+      .from('caregivers')
+      .select('*');
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Get a specific caregiver
+   */
+  async getCaregiver(caregiverId) {
+    const { data, error } = await supabase
+      .from('caregivers')
+      .select('*')
+      .eq('id', caregiverId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   // ============= CARE RECIPIENTS API =============
@@ -200,23 +330,84 @@ class ApiService {
    * Get all care recipients
    */
   async getCareRecipients() {
-    return this.request('/care-recipients');
+    const { data, error } = await supabase
+      .from('care_recipients')
+      .select('*');
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
   /**
    * Get a specific care recipient
    */
   async getCareRecipient(recipientId) {
-    return this.request(`/care-recipients/${recipientId}`);
+    const { data, error } = await supabase
+      .from('care_recipients')
+      .select('*')
+      .eq('id', recipientId)
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   }
 
-  // ============= HEALTH CHECK =============
+  // ============= CAREGIVER ASSIGNMENTS API =============
 
   /**
-   * Check if the server is running
+   * Get caregivers assigned to a care recipient
+   */
+  async getAssignedCaregivers(careRecipientId) {
+    const { data, error } = await supabase
+      .from('caregiver_assignments')
+      .select('*, caregivers(*)')
+      .eq('care_recipient_id', careRecipientId);
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Get care recipients assigned to a caregiver
+   */
+  async getAssignedCareRecipients(caregiverId) {
+    const { data, error } = await supabase
+      .from('caregiver_assignments')
+      .select('*, care_recipients(*)')
+      .eq('caregiver_id', caregiverId);
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Assign a caregiver to a care recipient
+   */
+  async assignCaregiver(caregiverId, careRecipientId) {
+    const { data, error } = await supabase
+      .from('caregiver_assignments')
+      .insert({
+        caregiver_id: caregiverId,
+        care_recipient_id: careRecipientId,
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /**
+   * Check if Supabase connection is working
    */
   async healthCheck() {
-    return this.request('/health');
+    try {
+      const { error } = await supabase.from('users').select('id').limit(1);
+      if (error) throw error;
+      return { status: 'healthy', database: 'connected' };
+    } catch (error) {
+      return { status: 'unhealthy', error: error.message };
+    }
   }
 }
 

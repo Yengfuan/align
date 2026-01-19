@@ -6,14 +6,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
 } from 'react-native';
 import { Colors, TextStyles, ContainerStyles, Shadows, BorderRadius } from '../styles/CommonStyles';
 
-export default function RecipientProfile({ route, navigation }) {
+export default function RecipientProfile({ route }) {
   const { recipient } = route.params;
 
-  // Mock detailed profile data - replace with actual data from your backend
+  // Profile data - basic info comes from Supabase care_recipients table
+  // TODO: In production, create a 'care_recipient_profiles' table in Supabase
+  // to store detailed profile information like preferences, medical history, etc.
   const profileData = {
     basicInfo: {
       age: recipient.age,
