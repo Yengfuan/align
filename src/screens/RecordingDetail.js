@@ -88,6 +88,14 @@ export default function RecordingDetail({ route }) {
         // Load and play the audio for the first time
         console.log('Loading audio from:', recording.audio_url);
 
+        // Configure audio mode for playback on iOS (use main speaker, not earpiece)
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+        });
+
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri: recording.audio_url },
           { shouldPlay: true }

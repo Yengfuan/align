@@ -59,7 +59,7 @@ npm start
 ```
 
 4. Run on your device:
-   - Install Expo Go app on your iOS or Android device
+   - Install Expo Go app on your iOS or Android device ( we recommend Android)
    - Scan the QR code from the terminal
 
 
@@ -86,4 +86,4 @@ npm start
 
 MIT
 
-Go to SETUP.md for more details.
+## Go to SETUP.md for technical details on how to get our app up and running.
