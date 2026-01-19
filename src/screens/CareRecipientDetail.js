@@ -352,7 +352,9 @@ export default function CareRecipientDetail({ route, navigation }) {
     try {
       // Use the first shift of the day for analysis
       const shiftId = day.shifts[0].id;
+      console.log('[AI Analysis] Fetching analysis for shift:', shiftId);
       const analysis = await gemini.analyzeShiftNotes(shiftId);
+      console.log('[AI Analysis] Response received:', JSON.stringify(analysis, null, 2));
       setAiAnalysisData(analysis);
     } catch (error) {
       console.error('Error analyzing shift:', error);
@@ -362,6 +364,7 @@ export default function CareRecipientDetail({ route, navigation }) {
         suggestions: [],
       });
     } finally {
+      console.log('[AI Analysis] Setting loading to false');
       setAiAnalysisLoading(false);
     }
   };

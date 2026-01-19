@@ -25,8 +25,10 @@ const ShiftAIAnalysis = ({ shiftId, careRecipientName }) => {
   const analyzeShift = async () => {
     setLoading(true);
     setError(null);
+    console.log("analyzeShift called with shiftId:", shiftId);
     try {
       const result = await gemini.analyzeShiftNotes(shiftId);
+      console.log("Analysis result:", result);
       setAnalysis(result);
       setExpandedSummary(true);
       setExpandedPriorities(true);

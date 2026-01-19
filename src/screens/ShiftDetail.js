@@ -205,10 +205,11 @@ export default function ShiftDetail({ route, navigation }) {
 
         {/* AI Analysis Section */}
         <View style={styles.aiAnalysisSection}>
-          <ShiftAIAnalysis
+          {/* <ShiftAIAnalysis
             shiftId={shift.uuid || shift.id}
             careRecipientName={recipient.name}
-          />
+          /> */}
+          <Text>Hello</Text>
         </View>
 
         {/* Recordings Section */}
@@ -470,6 +471,6 @@ const styles = StyleSheet.create({
   aiAnalysisSection: {
     paddingHorizontal: 15,
     paddingVertical: 10,
-    backgroundColor: '#f5f5f5',
+    // backgroundColor: '#f5f5f5',
   },
 });

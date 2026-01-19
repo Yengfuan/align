@@ -1,7 +1,7 @@
 class GeminiService {
   // Backend URL for AI analysis (Flask server)
-  // Use the public Railway URL (not the internal one)
-  BACKEND_URL = 'align-production-b858.up.railway.app';
+  // Railway uses HTTPS on the default port (no port number needed)
+  BACKEND_URL = 'https://align-production-b858.up.railway.app';
 
   /**
    * Analyze shift notes using Gemini AI
@@ -21,7 +21,9 @@ class GeminiService {
         throw new Error(errorData.error || 'Failed to analyze shift notes');
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('[Gemini] Raw API response:', JSON.stringify(data, null, 2));
+      return data;
     } catch (error) {
       console.error('[API] analyzeShiftNotes error:', error);
       throw error;
