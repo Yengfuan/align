@@ -1,7 +1,7 @@
 class GeminiService {
   // Backend URL for AI analysis (Flask server)
   // Railway uses HTTPS on the default port (no port number needed)
-  BACKEND_URL = 'https://align-production-b858.up.railway.app';
+  BACKEND_URL = 'https://align-production-1a84.up.railway.app';
 
   /**
    * Analyze shift notes using Gemini AI
